@@ -1,0 +1,3 @@
+description = "Serve remote processor firmware over QRTR"
+exec = ["/usr/bin/tqftpserv"]
+needs = ["remount-root"]

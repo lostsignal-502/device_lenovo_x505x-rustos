@@ -1,0 +1,41 @@
+#!/bin/sh
+# Usage: boot-image KERNEL_OUT INITRAMFS CMDLINE OUT
+# Plain image for lk2nd RAM boot; set LK2ND_IMAGE for a prefixed flash image.
+set -eu
+[ "$#" -eq 4 ] || { echo "usage: $0 KERNEL_OUT INITRAMFS CMDLINE OUT" >&2; exit 2; }
+KOUT=$1 INITRAMFS=$2 CMDLINE=$3 OUT=$4
+DTB="$KOUT/arch/arm64/boot/dts/qcom/sdm429-lenovo-tbx505x.dtb"
+python3 - "$KOUT/arch/arm64/boot/Image" <<'CHECK'
+import struct, sys
+from pathlib import Path
+with open(sys.argv[1], 'rb') as f:
+    header = f.read(64)
+if len(header) != 64 or header[56:60] != b'ARM\x64':
+    sys.exit('Invalid arm64 Image header')
+size = struct.unpack_from('<Q', header, 16)[0]
+if not 0 < size < 51_000_000:
+    sys.exit(f'Unpacked kernel size {size} exceeds conservative bootloader limit')
+CHECK
+mkdir -p "$(dirname -- "$OUT")"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+"${MKBOOTIMG:-mkbootimg}" --header_version 2 \
+    --kernel "$KOUT/arch/arm64/boot/Image.gz" --ramdisk "$INITRAMFS" --dtb "$DTB" \
+    --pagesize 2048 --base 0x80000000 --kernel_offset 0x8000 \
+    --ramdisk_offset 0x1000000 --second_offset 0 --tags_offset 0x100 \
+    --dtb_offset 0x1f00000 --cmdline "$CMDLINE" -o "$TMP/plain.img"
+python3 - "$TMP/plain.img" "$OUT" "${LK2ND_IMAGE:-}" <<'PACK'
+import sys
+from pathlib import Path
+plain, output, lk = sys.argv[1:]
+image = Path(plain).read_bytes()
+if lk:
+    prefix = Path(lk).read_bytes()
+    if len(prefix) > 524288:
+        sys.exit('lk2nd image exceeds 512 KiB prefix')
+    image = prefix.ljust(524288, b'\0') + image
+if len(image) > 67108864:
+    sys.exit('Image exceeds 64 MiB boot partition')
+Path(output).write_bytes(image)
+PACK
+echo "$OUT: TB-X505X boot image"

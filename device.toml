@@ -1,0 +1,32 @@
+# Lenovo Tab M10 HD, TB-X505X (SDM429).
+[device]
+name = "lenovo_x505x"
+description = "Lenovo Tab M10 HD (TB-X505X)"
+arch = "aarch64"
+
+[kernel]
+repo = "https://github.com/TB-X505X-Labs/linux"
+branch = "msm89x7/7.1.3"
+dtb = "qcom/sdm429-lenovo-tbx505x.dtb"
+
+[boot]
+cmdline = "clk_ignore_unused pd_ignore_unused regulator_ignore_unused console=tty0 drm_kms_helper.fbdev_emulation=0"
+
+[initrd]
+root_partition = "userdata"
+root_label = "rustos_root"
+firmware_path = "/lib/firmware"
+usb_gadget = "ncm"
+usb_vendor = "0x1d6b"
+usb_product = "0x0104"
+usb_manufacturer = "Lenovo"
+usb_name = "Lenovo Tab M10 HD"
+usb_serial = "rustos-x505x"
+usb_ip = "172.16.42.1"
+rescue_reboot = "bootloader"
+
+[shell]
+scale = 1
+cutout_left = 0
+output_make = "Lenovo"
+output_model = "Tab M10 HD"

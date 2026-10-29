@@ -1,0 +1,24 @@
+#!/bin/sh
+# Usage: build-kernel KERNEL_SRC OUT
+set -eu
+[ "$#" -eq 2 ] || { echo "usage: $0 KERNEL_SRC OUT" >&2; exit 2; }
+DEVICE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+K=$(CDPATH= cd -- "$1" && pwd)
+OUT=$(realpath -m -- "$2")
+[ "$K" != "$OUT" ] || { echo "Use a separate output directory" >&2; exit 1; }
+if [ -f "$HOME/.cargo/env" ]; then . "$HOME/.cargo/env"; fi
+kmake() { make -C "$K" O="$OUT" ARCH=arm64 LLVM=1 "$@"; }
+mkdir -p "$OUT"
+kmake rustavailable
+kmake sdm429-lenovo-tbx505x_defconfig
+ARCH=arm64 LLVM=1 "$K/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" \
+    "$DEVICE_DIR/kernel/rust.config" "$DEVICE_DIR/kernel/rust-binder.config" "$DEVICE_DIR/kernel/rustos.config"
+kmake olddefconfig
+for option in RUST ANDROID_BINDER_IPC_RUST RD_ZSTD EXT4_FS BLK_DEV_LOOP USB_CONFIGFS_NCM; do
+    grep -qx "CONFIG_$option=y" "$OUT/.config" || { echo "CONFIG_$option did not stick" >&2; exit 1; }
+done
+if grep -Eq '^CONFIG_(ANDROID_BINDER_IPC|KSU)=y' "$OUT/.config"; then
+    echo "Conflicting C Binder or KernelSU remains enabled" >&2; exit 1
+fi
+kmake -j"${JOBS:-$(nproc)}" DTC_FLAGS=-@ Image.gz qcom/sdm429-lenovo-tbx505x.dtb modules
+kmake INSTALL_MOD_PATH="$OUT/modules_install" INSTALL_MOD_STRIP=1 modules_install
